@@ -4,6 +4,7 @@ from django.core.mail.backends.base import BaseEmailBackend
 from django.core.mail.message import sanitize_address
 from django.utils import simplejson as json
 
+from email.utils import parseaddr
 import requests
 
 class DjrillBackendHTTPError(Exception):
@@ -87,7 +88,6 @@ class DjrillBackend(BaseEmailBackend):
         self.sender = sanitize_address(message.from_email, message.encoding)
         recipients_list = [sanitize_address(addr, message.encoding)
             for addr in message.recipients()]
-        from email.utils import parseaddr
         self.recipients = [{"email": e, "name": n} for n,e in [
             parseaddr(r) for r in recipients_list]]
 
@@ -118,10 +118,12 @@ class DjrillBackend(BaseEmailBackend):
         use by default. Standard text email messages sent through Django will
         still work through Mandrill.
         """
+        name, email = parseaddr(self.sender)
         return {
             "text": message.body,
             "subject": message.subject,
-            "from_email": self.sender,
+            "from_email": email,
+            "from_name": name,
             "to": self.recipients
         }
 
