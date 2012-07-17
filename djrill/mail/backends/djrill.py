@@ -132,10 +132,11 @@ class DjrillBackend(BaseEmailBackend):
         Builds advanced message dict and attaches any accepted extra headers.
         """
         self.msg_dict.update({
-            "from_name": message.from_name,
             "tags": message.tags,
             "track_opens": message.track_opens,
         })
+        if message.from_name:
+            self.msg_dict["from_name"] = message.from_name
 
         if message.extra_headers:
             accepted_headers = {}
