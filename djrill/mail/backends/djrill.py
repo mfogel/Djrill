@@ -7,6 +7,7 @@ from django.utils import simplejson as json
 from email.utils import parseaddr
 import requests
 
+
 class DjrillBackendHTTPError(Exception):
     """An exception that will turn into an HTTP error response."""
     def __init__(self, status_code, log_message=None):
@@ -63,7 +64,7 @@ class DjrillBackend(BaseEmailBackend):
         self.sender = sanitize_address(message.from_email, message.encoding)
         recipients_list = [sanitize_address(addr, message.encoding)
             for addr in message.recipients()]
-        self.recipients = [{"email": e, "name": n} for n,e in [
+        self.recipients = [{"email": e, "name": n} for n, e in [
             parseaddr(r) for r in recipients_list]]
 
         self.msg_dict = self._build_standard_message_dict(message)
@@ -81,7 +82,10 @@ class DjrillBackend(BaseEmailBackend):
 
         if djrill_it.status_code != 200:
             if not self.fail_silently:
-                raise DjrillBackendHTTPError(status_code=djrill_it.status_code, log_message="Failed to send a message to %s, from %s" % (self.recipients, self.sender))
+                msg = "Failed to send a message to %s, from %s" % (
+                        self.recipients, self.sender)
+                raise DjrillBackendHTTPError(
+                        status_code=djrill_it.status_code, log_message=msg)
             return False
         return True
 
