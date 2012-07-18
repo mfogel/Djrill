@@ -34,7 +34,6 @@ class DjrillBackend(BaseEmailBackend):
         super(DjrillBackend, self).__init__(**kwargs)
         self.api_key = getattr(settings, "MANDRILL_API_KEY", None)
         self.api_url = getattr(settings, "MANDRILL_API_URL", None)
-        self.connection = None
 
         if not self.api_key:
             raise ImproperlyConfigured("You have not set your mandrill api key "
@@ -44,25 +43,6 @@ class DjrillBackend(BaseEmailBackend):
                 "url to your settings.py")
 
         self.api_action = self.api_url + "/messages/send.json"
-        self.api_verify = self.api_url + "/users/verify-sender.json"
-
-    def open(self, sender):
-        """
-        """
-        self.connection = True
-        # self.connection = None
-        # 
-        # valid_sender = requests.post(
-        #     self.api_verify, data={"key": self.api_key, "email": sender})
-        # 
-        # if valid_sender.status_code == 200:
-        #     data = json.loads(valid_sender.content)
-        #     if data["is_enabled"]:
-        #         self.connection = True
-        #         return True
-        # else:
-        #     if not self.fail_silently:
-        #         raise
 
     def send_messages(self, email_messages):
         if not email_messages:
@@ -70,12 +50,7 @@ class DjrillBackend(BaseEmailBackend):
 
         num_sent = 0
         for message in email_messages:
-            self.open(message.from_email)
-            if not self.connection:
-                return
-
             sent = self._send(message)
-
             if sent:
                 num_sent += 1
 
