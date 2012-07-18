@@ -14,7 +14,7 @@ class DjrillMessage(EmailMultiAlternatives):
             connection, attachments, headers, alternatives, cc)
 
         self.from_name = from_name
-        self.tags = self._set_mandrill_tags(tags)
+        self.tags = self._set_mandrill_tags(tags or [])
         self.track_opens = track_opens
         self.track_clicks = track_clicks
 
