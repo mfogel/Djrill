@@ -1,18 +1,11 @@
 from django.core.exceptions import ImproperlyConfigured
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMessage, EmailMultiAlternatives
 
 
-class DjrillMessage(EmailMultiAlternatives):
-    alternative_subtype = "mandrill"
-
-    def __init__(self, subject='', body='', from_email=None, to=None, bcc=None,
-        connection=None, attachments=None, headers=None, alternatives=None,
-        cc=None, from_name=None, tags=None, track_opens=True,
-        track_clicks=True):
-
-        super(DjrillMessage, self).__init__(subject, body, from_email, to, bcc,
-            connection, attachments, headers, alternatives, cc)
-
+class DjrillMessageMixin(object):
+    def __init__(self, from_name=None, tags=None, track_opens=True,
+            track_clicks=True, **kwargs):
+        super(DjrillMessageMixin, self).__init__(**kwargs)
         self.from_name = from_name
         self.tags = self._set_mandrill_tags(tags or [])
         self.track_opens = track_opens
@@ -37,3 +30,19 @@ class DjrillMessage(EmailMultiAlternatives):
                     "internal use and will cause errors with Mandill's API")
 
         return tag_list
+
+
+class DjrillMessage(DjrillMessageMixin, EmailMultiAlternatives):
+    content_subtype = "mandrill"
+
+
+class DjrillTemplateMessage(DjrillMessageMixin, EmailMessage):
+    content_subtype = 'mandrill.template'
+
+    def __init__(self, template_name=None, template_content=None, **kwargs):
+        super(DjrillTemplateMessage, self).__init__(**kwargs)
+        if not template_name:
+            raise RuntimeError("Template name is required")
+
+        self.template_name = template_name
+        self.template_content = template_content or []

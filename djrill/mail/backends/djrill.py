@@ -10,23 +10,25 @@ import requests
 
 class DjrillBackendHTTPError(Exception):
     """An exception that will turn into an HTTP error response."""
-    def __init__(self, status_code, log_message=None):
+    def __init__(self, status_code, message):
         super(DjrillBackendHTTPError, self).__init__()
         self.status_code = status_code
-        self.log_message = log_message
+        self.message = message
 
     def __str__(self):
-        message = "DjrillBackendHTTP %d" % self.status_code
-        if self.log_message:
-            return message + " " + self.log_message
-        else:
-            return message
+        return u"Remote server {} error: {}".format(
+                self.status_code, self.message)
 
 
 class DjrillBackend(BaseEmailBackend):
     """
     Mandrill API Email Backend
     """
+
+    api_methods = {
+        'send': 'messages/send.json',
+        'send-template': 'messages/send-template.json',
+    }
 
     def __init__(self, fail_silently=False, **kwargs):
         """
@@ -35,15 +37,16 @@ class DjrillBackend(BaseEmailBackend):
         super(DjrillBackend, self).__init__(**kwargs)
         self.api_key = getattr(settings, "MANDRILL_API_KEY", None)
         self.api_url = getattr(settings, "MANDRILL_API_URL", None)
+        # add trailing slash to url if not present
+        if not self.api_url[-1] == '/':
+            self.api_url += '/'
 
         if not self.api_key:
-            raise ImproperlyConfigured("You have not set your mandrill api key "
+            raise ImproperlyConfigured("You have not set your Mandrill api key "
                 "in the settings.py file.")
         if not self.api_url:
             raise ImproperlyConfigured("You have not added the Mandrill api "
                 "url to your settings.py")
-
-        self.api_action = self.api_url + "/messages/send.json"
 
     def send_messages(self, email_messages):
         if not email_messages:
@@ -61,35 +64,28 @@ class DjrillBackend(BaseEmailBackend):
         if not message.recipients():
             return False
 
-        self.sender = sanitize_address(message.from_email, message.encoding)
-        recipients_list = [sanitize_address(addr, message.encoding)
-            for addr in message.recipients()]
-        self.recipients = [{"email": e, "name": n} for n, e in [
-            parseaddr(r) for r in recipients_list]]
+        payload = self._build_standard_payload(message)
+        if message.content_subtype.startswith('mandrill'):
+            self._update_mandrill_payload(payload, message)
 
-        self.msg_dict = self._build_standard_message_dict(message)
+        target = self._get_target(message)
+        resp = requests.post(target, data=json.dumps(payload))
 
-        if getattr(message, "alternative_subtype", None):
-            if message.alternative_subtype == "mandrill":
-                self._build_advanced_message_dict(message)
-                if message.alternatives:
-                    self._add_alternatives(message)
-
-        djrill_it = requests.post(self.api_action, data=json.dumps({
-            "key": self.api_key,
-            "message": self.msg_dict
-        }))
-
-        if djrill_it.status_code != 200:
-            if not self.fail_silently:
-                msg = "Failed to send a message to %s, from %s" % (
-                        self.recipients, self.sender)
-                raise DjrillBackendHTTPError(
-                        status_code=djrill_it.status_code, log_message=msg)
-            return False
+        if resp.status_code != 200:
+            if self.fail_silently:
+                return False
+            data = json.loads(resp.content)
+            raise DjrillBackendHTTPError(
+                    resp.status_code, data['message'])
         return True
 
-    def _build_standard_message_dict(self, message):
+    def _get_target(self, message):
+        method_name = 'send'
+        if message.content_subtype == 'mandrill.template':
+            method_name = 'send-template'
+        return settings.MANDRILL_API_URL + self.api_methods[method_name]
+
+    def _build_standard_payload(self, message):
         """
         Build standard message dict.
 
@@ -97,49 +93,60 @@ class DjrillBackend(BaseEmailBackend):
         use by default. Standard text email messages sent through Django will
         still work through Mandrill.
         """
-        name, email = parseaddr(self.sender)
+        recipients_list = [
+                sanitize_address(addr, message.encoding)
+                for addr in message.recipients()]
+        recipients = [
+                {"email": e, "name": n}
+                for n, e in [parseaddr(r) for r in recipients_list]]
+
+        sender = sanitize_address(message.from_email, message.encoding)
+        name, email = parseaddr(sender)
+
         return {
-            "text": message.body,
-            "subject": message.subject,
-            "from_email": email,
-            "from_name": name,
-            "to": self.recipients
+            'key': self.api_key,
+            'message': {
+                'text': message.body,
+                'subject': message.subject,
+                'from_email': email,
+                'from_name': getattr(message, 'from_name', name),
+                'to': recipients,
+            },
         }
 
-    def _build_advanced_message_dict(self, message):
+    def _update_mandrill_payload(self, payload, message):
         """
-        Builds advanced message dict and attaches any accepted extra headers.
+        Updates the payload with the mandrill-specific attributes.
+        These are attributes that django send_mail() doesn't use,
+        but the Mandril email classes do.
         """
-        self.msg_dict.update({
-            "tags": message.tags,
-            "track_opens": message.track_opens,
-        })
-        if message.from_name:
-            self.msg_dict["from_name"] = message.from_name
 
+        accepted_headers = {}
         if message.extra_headers:
-            accepted_headers = {}
-
             for k in message.extra_headers.keys():
-                if k.startswith("X-") or k == "Reply-To":
-                    accepted_headers.update(
-                        {"%s" % k: message.extra_headers[k]})
-            self.msg_dict.update({"headers": accepted_headers})
+                if k.startswith('X-') or k == 'Reply-To':
+                    accepted_headers[str(k)] = message.extra_headers[k]
+            msg_dict.update({'headers': accepted_headers})
 
-    def _add_alternatives(self, message):
-        """
-        There can be only one! ... alternative attachment.
-
-        Since mandrill does not accept image attachments or anything other
-        than HTML, the assumption is the only thing you are attaching is
-        the HTML output for your email.
-        """
-        if len(message.alternatives) > 1:
-            raise ImproperlyConfigured(
-                "Mandrill only accepts plain text and html emails. Please "
-                "check the alternatives you have attached to your message.")
-
-        self.msg_dict.update({
-            "html": message.alternatives[0][0],
-            "track_clicks": message.track_clicks
+        payload['message'].update({
+            'tags': message.tags,
+            'track_opens': message.track_opens,
+            'track_clicks': message.track_clicks,
+            'headers': accepted_headers,
         })
+
+        # sending html over to mandrill
+        if getattr(message, 'alternatives', None):
+            if len(message.alternatives) > 1:
+                raise ImproperlyConfigured(
+                        "Mandrill only accepts plain text and html emails. "
+                        "Please check the alternatives you have attached to "
+                        "your message.")
+            payload['message']['html'] = message.alternatives[0][0]
+
+        # using a mandrill template message
+        if message.content_subtype == 'mandrill.template':
+            payload.update({
+                'template_name': message.template_name,
+                'template_content': message.template_content,
+            })
