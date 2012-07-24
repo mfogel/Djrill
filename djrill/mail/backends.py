@@ -135,6 +135,12 @@ class DjrillBackend(BaseEmailBackend):
             'headers': accepted_headers,
         })
 
+        if message.global_merge_vars:
+            payload['message']['global_merge_vars'] = [
+                {'name': key, 'content': value}
+                for key, value in message.global_merge_vars.iteritems()
+            ]
+
         # sending html over to mandrill
         if getattr(message, 'alternatives', None):
             if len(message.alternatives) > 1:

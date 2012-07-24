@@ -4,12 +4,22 @@ from django.core.mail import EmailMessage, EmailMultiAlternatives
 
 class DjrillMessageMixin(object):
     def __init__(self, from_name=None, tags=None, track_opens=True,
-            track_clicks=True, **kwargs):
+            track_clicks=True, global_merge_vars=None, **kwargs):
+        """
+        DjrillMessage
+        https://mandrillapp.com/api/docs/messages.html#method=send
+
+        Parameter notes:
+            * global_merge_vars: a dictionary, of name -> content
+        """
+
         super(DjrillMessageMixin, self).__init__(**kwargs)
+
         self.from_name = from_name
         self.tags = self._set_mandrill_tags(tags or [])
         self.track_opens = track_opens
         self.track_clicks = track_clicks
+        self.global_merge_vars = global_merge_vars or {}
 
     def _set_mandrill_tags(self, tags):
         """
