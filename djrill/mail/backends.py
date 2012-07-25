@@ -126,7 +126,7 @@ class DjrillBackend(BaseEmailBackend):
             for k in message.extra_headers.keys():
                 if k.startswith('X-') or k == 'Reply-To':
                     accepted_headers[str(k)] = message.extra_headers[k]
-            msg_dict.update({'headers': accepted_headers})
+            payload['message'].update({'headers': accepted_headers})
 
         payload['message'].update({
             'tags': message.tags,
