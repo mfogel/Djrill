@@ -1,10 +1,14 @@
+import base64
+import mimetypes
+from email.mime.base import MIMEBase
+from email.utils import parseaddr
+
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.mail.message import sanitize_address
 from django.utils import simplejson as json
 
-from email.utils import parseaddr
 import requests
 
 
@@ -103,7 +107,7 @@ class DjrillBackend(BaseEmailBackend):
         sender = sanitize_address(message.from_email, message.encoding)
         name, email = parseaddr(sender)
 
-        return {
+        payload = {
             'key': self.api_key,
             'message': {
                 'text': message.body,
@@ -113,6 +117,31 @@ class DjrillBackend(BaseEmailBackend):
                 'to': recipients,
             },
         }
+
+        if message.attachments:
+            payload['message']['attachments'] = []
+            for attachment in message.attachments:
+                # django supports two types of attachements:
+                #   * a subclass of email.mime.base.MIMEBase
+                #   * a tuple of (filename, content[, mimetype])
+                if isinstance(attachment, MIMEBase):
+                    filename = attachment.get_filename()
+                    content = attachment.get_payload(decode=True)
+                    mimetype = attachment.get_content_type()
+                else:
+                    filename = attachment[0]
+                    content = attachment[1]
+                    mimetype = (
+                        attachment[2]
+                        if len(attachment) > 2 and attachment[2]
+                        else mimetypes.guess_type(filename)[0]
+                    )
+                payload['message']['attachments'].append({
+                    'type': mimetype,
+                    'name': str(filename),
+                    'content': base64.b64encode(content),
+                })
+        return payload
 
     def _update_mandrill_payload(self, payload, message):
         """
