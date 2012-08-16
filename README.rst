@@ -37,11 +37,11 @@ In ``settings.py``:
 2. Add the following two lines, substituting your own ``MANDRILL_API_KEY``::
 
     MANDRILL_API_KEY = "brack3t-is-awesome"
-    MANDRILL_API_URL = "http://mandrillapp.com/api/1.0"
+    MANDRILL_API_URL = "http://mandrillapp.com/api/1.0/"
 
 3. Override your existing email backend with the following line::
 
-    EMAIL_BACKEND = "djrill.mail.backends.djrill.DjrillBackend"
+    EMAIL_BACKEND = "djrill.mail.backends.DjrillBackend"
 
 4. (optional) If you want to be able to add senders through Django's admin or view stats about your 
    messages, do the following in your base ``urls.py`` ::
