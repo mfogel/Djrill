@@ -113,7 +113,7 @@ class DjrillBackend(BaseEmailBackend):
                 'text': message.body,
                 'subject': message.subject,
                 'from_email': email,
-                'from_name': getattr(message, 'from_name', name),
+                'from_name': getattr(message, 'from_name', None) or name,
                 'to': recipients,
             },
         }
